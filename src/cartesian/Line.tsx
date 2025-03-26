@@ -38,6 +38,7 @@ import { SetLegendPayload } from '../state/SetLegendPayload';
 import { AreaPointItem } from '../state/selectors/areaSelectors';
 
 export interface LinePointItem extends CurvePoint {
+  readonly zScore: number;
   readonly value?: number;
   readonly payload?: any;
 }
@@ -249,6 +250,7 @@ function Dots({
       ...lineProps,
       ...customDotProps,
       index: i,
+      isAnomaly: entry.zScore > 1 || points[i - 1].zScore > 1,
       cx: entry.x,
       cy: entry.y,
       dataKey,
@@ -423,6 +425,7 @@ function CurveWithAnimation({
 
         if (prevPoints) {
           const prevPointsDiffFactor = prevPoints.length / points.length;
+
           const stepData =
             t === 1
               ? points
@@ -653,6 +656,38 @@ function LineImpl(props: Props) {
   );
 }
 
+const addZScore = (points: ReadonlyArray<LinePointItem>) => {
+  const validPoints = points.filter(point => point.value !== undefined && point.value !== null);
+
+  if (validPoints.length === 0) return points;
+
+  const avg =
+    validPoints.reduce((acc, point) => {
+      return acc + (point.value || 0);
+    }, 0) / validPoints.length;
+
+  const variance =
+    validPoints.reduce((acc, point) => {
+      const diff = (point.value || 0) - avg;
+      return acc + diff * diff;
+    }, 0) / validPoints.length;
+
+  const deviation = Math.sqrt(variance);
+
+  if (deviation === 0 || deviation < 0.0001) return points;
+
+  return points.map(point => {
+    if (point.value !== undefined && point.value !== null) {
+      const zScore = (point.value - avg) / deviation;
+      return {
+        ...point,
+        zScore: Math.abs(zScore),
+      };
+    }
+    return point;
+  });
+};
+
 export function computeLinePoints({
   layout,
   xAxis,
@@ -672,26 +707,30 @@ export function computeLinePoints({
   bandSize: number;
   displayedData: any[];
 }): ReadonlyArray<LinePointItem> {
-  return displayedData.map((entry, index): LinePointItem => {
-    // @ts-expect-error getValueByDataKey does not validate the output type
-    const value: number = getValueByDataKey(entry, dataKey);
+  return addZScore(
+    displayedData.map((entry, index): LinePointItem => {
+      // @ts-expect-error getValueByDataKey does not validate the output type
+      const value: number = getValueByDataKey(entry, dataKey);
 
-    if (layout === 'horizontal') {
+      if (layout === 'horizontal') {
+        return {
+          x: getCateCoordinateOfLine({ axis: xAxis, ticks: xAxisTicks, bandSize, entry, index }),
+          y: isNullish(value) ? null : yAxis.scale(value),
+          zScore: null,
+          value,
+          payload: entry,
+        };
+      }
+
       return {
-        x: getCateCoordinateOfLine({ axis: xAxis, ticks: xAxisTicks, bandSize, entry, index }),
-        y: isNullish(value) ? null : yAxis.scale(value),
+        x: isNullish(value) ? null : xAxis.scale(value),
+        y: getCateCoordinateOfLine({ axis: yAxis, ticks: yAxisTicks, bandSize, entry, index }),
+        zScore: null,
         value,
         payload: entry,
       };
-    }
-
-    return {
-      x: isNullish(value) ? null : xAxis.scale(value),
-      y: getCateCoordinateOfLine({ axis: yAxis, ticks: yAxisTicks, bandSize, entry, index }),
-      value,
-      payload: entry,
-    };
-  });
+    }),
+  );
 }
 
 export class Line extends PureComponent<Props> {

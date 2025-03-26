@@ -12,23 +12,26 @@ interface DotProps {
   cy?: number;
   r?: number;
   clipDot?: boolean;
+  isAnomaly?: boolean;
 }
 
 export type Props = PresentationAttributesWithProps<DotProps, SVGCircleElement> & DotProps;
 
 export const Dot: React.FC<Props> = props => {
-  const { cx, cy, r, className } = props;
+  const { cx, cy, r, className, isAnomaly } = props;
   const layerClass = clsx('recharts-dot', className);
+  const filtredProps = filterProps(props, false);
 
   if (cx === +cx && cy === +cy && r === +r) {
     return (
       <circle
-        {...filterProps(props, false)}
+        {...filtredProps}
         {...adaptEventHandlers(props)}
         className={layerClass}
         cx={cx}
         cy={cy}
         r={r}
+        stroke={isAnomaly ? 'red' : filtredProps.stroke}
       />
     );
   }

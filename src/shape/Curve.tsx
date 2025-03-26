@@ -22,6 +22,7 @@ import {
 } from 'victory-vendor/d3-shape';
 
 import clsx from 'clsx';
+import { nanoid } from '@reduxjs/toolkit';
 import { LayoutType, PresentationAttributesWithProps, adaptEventHandlers } from '../util/types';
 import { filterProps } from '../util/ReactUtils';
 import { isNumber, upperFirst } from '../util/DataUtils';
@@ -67,6 +68,7 @@ export type CurveType =
 export interface Point {
   readonly x: number;
   readonly y: number;
+  readonly zScore: number;
 }
 
 const defined = (p: Point) => p.x === +p.x && p.y === +p.y;
@@ -156,13 +158,92 @@ export const Curve: React.FC<Props> = props => {
 
   const realPath = points && points.length ? getPath(props) : path;
 
+  const highlightSegments: Array<{
+    segment: Point[];
+    contextPoints: Point[];
+  }> = [];
+
+  if (points && points.length > 0) {
+    points.forEach((point, i) => {
+      if (point.zScore > 1) {
+        const segment = [point];
+
+        const contextStartIdx = Math.max(0, i - 2);
+        const contextEndIdx = Math.min(points.length - 1, i + 2);
+        const contextPoints = points.slice(contextStartIdx, contextEndIdx + 1);
+
+        highlightSegments.push({
+          segment,
+          contextPoints,
+        });
+      }
+    });
+  }
+
   return (
-    <path
-      {...filterProps(props, false)}
-      {...adaptEventHandlers(props)}
-      className={clsx('recharts-curve', className)}
-      d={realPath}
-      ref={pathRef}
-    />
+    <>
+      <path
+        {...filterProps(props, false)}
+        {...adaptEventHandlers(props)}
+        className={clsx('recharts-curve', className)}
+        d={realPath}
+        ref={pathRef}
+      />
+      {highlightSegments.length > 0 &&
+        highlightSegments.map(({ segment, contextPoints }) => {
+          if (!realPath) return null;
+
+          const clipId = `z-score-clip-${nanoid()}`;
+
+          if (segment.length === 0 || !segment[0]) return null;
+
+          const anomalyPoint = segment[0];
+
+          let minX = anomalyPoint.x;
+          let maxX = anomalyPoint.x;
+          let minY = anomalyPoint.y;
+          let maxY = anomalyPoint.y;
+
+          const pointIndex = contextPoints.findIndex(p => p.x === anomalyPoint.x && p.y === anomalyPoint.y);
+
+          const endIdx = Math.min(contextPoints.length - 1, pointIndex + 1);
+
+          for (let i = pointIndex; i <= endIdx; i++) {
+            const p = contextPoints[i];
+            minX = Math.min(minX, p.x);
+            maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y);
+            maxY = Math.max(maxY, p.y);
+          }
+
+          const padding = 1;
+          minX -= padding;
+          maxX += padding;
+          minY -= padding;
+          maxY += padding;
+
+          const width = maxX - minX;
+          const height = maxY - minY;
+
+          return (
+            <g key={clipId} className="recharts-curve-anomaly">
+              <defs>
+                <clipPath id={clipId}>
+                  <rect x={minX} y={minY} width={width} height={height} />
+                </clipPath>
+              </defs>
+              <path
+                className={clsx('recharts-curve-anomaly-path', className)}
+                stroke="red"
+                fill="none"
+                strokeWidth={3}
+                strokeLinecap="round"
+                d={realPath}
+                clipPath={`url(#${clipId})`}
+              />
+            </g>
+          );
+        })}
+    </>
   );
 };
