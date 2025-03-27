@@ -1,6 +1,0 @@
-[
-  "CHANGELOG.md",
-  "CONTRIBUTING.md",
-  "DEVELOPING.md",
-  "README.md",
-]
