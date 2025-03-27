@@ -68,7 +68,7 @@ export type CurveType =
 export interface Point {
   readonly x: number;
   readonly y: number;
-  readonly zScore: number;
+  readonly zScore?: number;
 }
 
 const defined = (p: Point) => p.x === +p.x && p.y === +p.y;
@@ -102,6 +102,58 @@ interface CurveProps {
 export type Props = Omit<PresentationAttributesWithProps<CurveProps, SVGPathElement>, 'type' | 'points'> & CurveProps;
 
 type GetPathProps = Pick<Props, 'type' | 'points' | 'baseLine' | 'layout' | 'connectNulls'>;
+
+const renderHighlightSegments = (
+  highlightSegments: Array<{ segment: Point[]; contextPoints: Point[] }>,
+  realPath: string | null,
+  className?: string,
+) => {
+  return highlightSegments.map(({ segment, contextPoints }) => {
+    if (!realPath || segment.length === 0 || !segment[0]) return null;
+
+    const clipId = `z-score-clip-${nanoid()}`;
+    const anomalyPoint = segment[0];
+    let [minX, maxX, minY, maxY] = [anomalyPoint.x, anomalyPoint.x, anomalyPoint.y, anomalyPoint.y];
+    const pointIndex = contextPoints.findIndex(p => p.x === anomalyPoint.x && p.y === anomalyPoint.y);
+    const endIdx = Math.min(contextPoints.length - 1, pointIndex + 1);
+
+    for (let i = pointIndex; i <= endIdx; i++) {
+      const p = contextPoints[i];
+      minX = Math.min(minX, p.x);
+      maxX = Math.max(maxX, p.x);
+      minY = Math.min(minY, p.y);
+      maxY = Math.max(maxY, p.y);
+    }
+
+    const padding = 1;
+    minX -= padding;
+    maxX += padding;
+    minY -= padding;
+    maxY += padding;
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    return (
+      <g key={clipId} className="recharts-curve-anomaly">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={minX} y={minY} width={width} height={height} />
+          </clipPath>
+        </defs>
+        <path
+          className={clsx('recharts-curve-anomaly-path', className)}
+          stroke="red"
+          fill="none"
+          strokeWidth={3}
+          strokeLinecap="round"
+          d={realPath}
+          clipPath={`url(#${clipId})`}
+        />
+      </g>
+    );
+  });
+};
 
 /**
  * Calculate the path of curve. Returns null if points is an empty array.
@@ -189,61 +241,7 @@ export const Curve: React.FC<Props> = props => {
         d={realPath}
         ref={pathRef}
       />
-      {highlightSegments.length > 0 &&
-        highlightSegments.map(({ segment, contextPoints }) => {
-          if (!realPath) return null;
-
-          const clipId = `z-score-clip-${nanoid()}`;
-
-          if (segment.length === 0 || !segment[0]) return null;
-
-          const anomalyPoint = segment[0];
-
-          let minX = anomalyPoint.x;
-          let maxX = anomalyPoint.x;
-          let minY = anomalyPoint.y;
-          let maxY = anomalyPoint.y;
-
-          const pointIndex = contextPoints.findIndex(p => p.x === anomalyPoint.x && p.y === anomalyPoint.y);
-
-          const endIdx = Math.min(contextPoints.length - 1, pointIndex + 1);
-
-          for (let i = pointIndex; i <= endIdx; i++) {
-            const p = contextPoints[i];
-            minX = Math.min(minX, p.x);
-            maxX = Math.max(maxX, p.x);
-            minY = Math.min(minY, p.y);
-            maxY = Math.max(maxY, p.y);
-          }
-
-          const padding = 1;
-          minX -= padding;
-          maxX += padding;
-          minY -= padding;
-          maxY += padding;
-
-          const width = maxX - minX;
-          const height = maxY - minY;
-
-          return (
-            <g key={clipId} className="recharts-curve-anomaly">
-              <defs>
-                <clipPath id={clipId}>
-                  <rect x={minX} y={minY} width={width} height={height} />
-                </clipPath>
-              </defs>
-              <path
-                className={clsx('recharts-curve-anomaly-path', className)}
-                stroke="red"
-                fill="none"
-                strokeWidth={3}
-                strokeLinecap="round"
-                d={realPath}
-                clipPath={`url(#${clipId})`}
-              />
-            </g>
-          );
-        })}
+      {highlightSegments.length > 0 && renderHighlightSegments(highlightSegments, realPath, className)}
     </>
   );
 };

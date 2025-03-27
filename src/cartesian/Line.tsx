@@ -38,7 +38,7 @@ import { SetLegendPayload } from '../state/SetLegendPayload';
 import { AreaPointItem } from '../state/selectors/areaSelectors';
 
 export interface LinePointItem extends CurvePoint {
-  readonly zScore: number;
+  readonly zScore?: number;
   readonly value?: number;
   readonly payload?: any;
 }
