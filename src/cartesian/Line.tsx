@@ -250,7 +250,7 @@ function Dots({
       ...lineProps,
       ...customDotProps,
       index: i,
-      isAnomaly: entry.zScore > 1 || points[i - 1].zScore > 1,
+      isAnomaly: entry.zScore > 1 || points[i - 1]?.zScore > 1,
       cx: entry.x,
       cy: entry.y,
       dataKey,
